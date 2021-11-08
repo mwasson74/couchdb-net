@@ -5,13 +5,15 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using CouchDB.Driver.Helpers;
+using CouchDB.Driver.Logging;
 using CouchDB.Driver.Options;
+using Microsoft.Extensions.Logging;
 
 namespace CouchDB.Driver
 {
     public partial class CouchClient
     {
-        protected virtual async Task OnBeforeCallAsync(FlurlCall httpCall)
+        protected virtual async Task OnBeforeCallAsync(FlurlCall httpCall, Func<FlurlCall, Task>? configuredOnBeforeCall)
         {
             Check.NotNull(httpCall, nameof(httpCall));
 
@@ -56,6 +58,13 @@ namespace CouchDB.Driver
                 default:
                     throw new NotSupportedException($"Authentication of type {_options.AuthenticationType} is not supported.");
             }
+
+            configuredOnBeforeCall?.Invoke(httpCall);
+        }
+
+        protected virtual Task OnAfterCallAsync(FlurlCall httpCall, Func<FlurlCall, Task>? configuredOnBeforeCall)
+        {
+            return Task.CompletedTask;
         }
 
         private async Task LoginAsync()

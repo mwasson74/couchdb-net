@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using CouchDB.Driver.Helpers;
+using CouchDB.Driver.Logging;
 using Flurl.Http.Configuration;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
 namespace CouchDB.Driver.Options
@@ -245,6 +248,113 @@ namespace CouchDB.Driver.Options
         public virtual CouchOptionsBuilder ConfigureFlurlClient(Action<ClientFlurlHttpSettings> flurlSettingsAction)
         {
             Options.ClientFlurlHttpSettingsAction = flurlSettingsAction;
+            return this;
+        }
+
+        public virtual CouchOptionsBuilder LogTo(
+            Action<string> action,
+            LogLevel minimumLevel = LogLevel.Debug,
+            DbContextLoggerOptions? options = null)
+            => LogTo(action, (i, l) => l >= minimumLevel, options);
+        
+        public virtual CouchOptionsBuilder LogTo(
+            Action<string> action,
+            IEnumerable<EventId> events,
+            LogLevel minimumLevel = LogLevel.Debug,
+            DbContextLoggerOptions? options = null)
+        {
+            Check.NotNull(events, nameof(events));
+
+            var eventsArray = events.ToArray();
+
+            if (eventsArray.Length == 0)
+            {
+                return this;
+            }
+
+            if (eventsArray.Length == 1)
+            {
+                var firstEvent = eventsArray[0];
+                return LogTo(
+                    action,
+                    (eventId, level) => level >= minimumLevel
+                        && eventId == firstEvent,
+                    options);
+            }
+
+            if (eventsArray.Length < 6)
+            {
+                return LogTo(
+                    action,
+                    (eventId, level) => level >= minimumLevel
+                        && eventsArray.Contains(eventId),
+                    options);
+            }
+
+            var eventsHash = eventsArray.ToHashSet();
+            return LogTo(
+                action,
+                (eventId, level) => level >= minimumLevel
+                    && eventsHash.Contains(eventId),
+                options);
+        }
+        
+        public virtual CouchOptionsBuilder LogTo(
+            Action<string> action,
+            IEnumerable<string> categories,
+            LogLevel minimumLevel = LogLevel.Debug,
+            DbContextLoggerOptions? options = null)
+        {
+            Check.NotNull(categories, nameof(categories));
+
+            var categoriesArray = categories.ToArray();
+
+            if (categoriesArray.Length == 0)
+            {
+                return this;
+            }
+
+            if (categoriesArray.Length != 1)
+            {
+                // One category is common, but even when there are more the number should be low because
+                // the number of available categories is low. So no HashSet here.
+                return LogTo(
+                    action,
+                    (eventId, level) =>
+                    {
+                        if (level >= minimumLevel)
+                        {
+                            for (var i = 0; i < categoriesArray.Length; i++)
+                            {
+                                if (eventId.Name!.StartsWith(categoriesArray[i], StringComparison.OrdinalIgnoreCase))
+                                {
+                                    return true;
+                                }
+                            }
+                        }
+
+                        return false;
+                    },
+                    options);
+            }
+
+            var singleCategory = categoriesArray[0];
+            return LogTo(
+                action,
+                (eventId, level) => level >= minimumLevel
+                    && eventId.Name!.StartsWith(singleCategory, StringComparison.OrdinalIgnoreCase),
+                options);
+        }
+
+        public virtual CouchOptionsBuilder LogTo(
+            Action<string> action,
+            Func<EventId, LogLevel, bool> filter,
+            DbContextLoggerOptions? options = null)
+        {
+            Check.NotNull(action, nameof(action));
+            Check.NotNull(filter, nameof(filter));
+
+            Options.CouchLogger = new FormattingCouchLogger(action, filter, options ?? DbContextLoggerOptions.DefaultWithLocalTime);
             return this;
         }
     }

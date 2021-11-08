@@ -13,6 +13,7 @@ using CouchDB.Driver.Exceptions;
 using Newtonsoft.Json;
 using System.Net;
 using System.Threading;
+using CouchDB.Driver.Logging;
 using CouchDB.Driver.Options;
 using CouchDB.Driver.Query;
 
@@ -25,10 +26,10 @@ namespace CouchDB.Driver
     {
         private DateTime? _cookieCreationDate;
         private string? _cookieToken;
-
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "<Pending>")]
+        
         private readonly IFlurlClient _flurlClient;
         private readonly CouchOptions _options;
+        private readonly ICouchLogger _couchLogger;
         private readonly string[] _systemDatabases = { "_users", "_replicator", "_global_changes" };
         public Uri Endpoint { get; }
 
@@ -50,6 +51,7 @@ namespace CouchDB.Driver
             var optionsBuilder = new CouchOptionsBuilder();
             couchSettingsFunc?.Invoke(optionsBuilder);
             _options = optionsBuilder.Options;
+            _couchLogger = new CouchLogger(_options.CouchLoggerOptions);
             Endpoint = endpoint;
             _flurlClient = GetConfiguredClient();
         }
@@ -69,6 +71,7 @@ namespace CouchDB.Driver
             }
 
             _options = optionsBuilder.Options;
+            _couchLogger = new CouchLogger(_options.CouchLoggerOptions);
             Endpoint = _options.Endpoint;
             _flurlClient = GetConfiguredClient();
         }
@@ -81,6 +84,7 @@ namespace CouchDB.Driver
             }
 
             _options = options;
+            _couchLogger = new CouchLogger(_options.CouchLoggerOptions);
             Endpoint = _options.Endpoint;
             _flurlClient = GetConfiguredClient();
         }
@@ -94,13 +98,15 @@ namespace CouchDB.Driver
                     ContractResolver = new CouchContractResolver(_options.PropertiesCase),
                     NullValueHandling = _options.NullValueHandling ?? NullValueHandling.Include
                 });
-                s.BeforeCallAsync = OnBeforeCallAsync;
                 if (_options.ServerCertificateCustomValidationCallback != null)
                 {
                     s.HttpClientFactory = new CertClientFactory(_options.ServerCertificateCustomValidationCallback);
                 }
 
                 _options.ClientFlurlHttpSettingsAction?.Invoke(s);
+
+                s.BeforeCallAsync = httpCall => OnBeforeCallAsync(httpCall, s.BeforeCallAsync);
+                s.AfterCallAsync = httpCall => OnAfterCallAsync(httpCall, s.AfterCallAsync);
             });
 
         #region Operations

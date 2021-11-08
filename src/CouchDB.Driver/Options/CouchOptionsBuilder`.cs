@@ -5,6 +5,7 @@ using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using Flurl.Http.Configuration;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
 namespace CouchDB.Driver.Options
@@ -168,5 +169,6 @@ namespace CouchDB.Driver.Options
         /// <returns>Return the current instance to chain calls.</returns>
         public new virtual CouchOptionsBuilder<TContext> ConfigureFlurlClient(Action<ClientFlurlHttpSettings> flurlSettingsAction)
             => (CouchOptionsBuilder<TContext>)base.ConfigureFlurlClient(flurlSettingsAction);
+
     }
 }
